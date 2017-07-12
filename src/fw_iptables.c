@@ -641,7 +641,7 @@ iptables_fw_counters_update(void)
     struct in_addr tempaddr;
 
     /* Look for outgoing traffic */
-    safe_asprintf(&script, "%s %s", "iptables", "-v -n -x -t mangle -L " CHAIN_OUTGOING);
+    safe_asprintf(&script, "iptables -t %s -L %s %s", "mangle", CHAIN_OUTGOING, "-v -n -x");
     iptables_insert_gateway_id(&script);
     output = popen(script, "r");
     free(script);
@@ -687,7 +687,7 @@ iptables_fw_counters_update(void)
     pclose(output);
 
     /* Look for incoming traffic */
-    safe_asprintf(&script, "%s %s", "iptables", "-v -n -x -t mangle -L " CHAIN_INCOMING);
+    safe_asprintf(&script, "iptables -t %s -L %s %s", "mangle", CHAIN_INCOMING, "-v -n -x");
     iptables_insert_gateway_id(&script);
     output = popen(script, "r");
     free(script);
