@@ -300,6 +300,7 @@ http_callback_disconnect(httpd * webserver, request * r)
     //httpVar *token = httpdGetVariableByName(r, "token");
     //httpVar *mac = httpdGetVariableByName(r, "mac");
     char *mac = arp_get(r->clientAddr);
+
     if (config->httpdusername &&
         (strcmp(config->httpdusername, r->request.authUser) ||
          strcmp(config->httpdpassword, r->request.authPassword))) {
@@ -340,7 +341,6 @@ http_callback_disconnect(httpd * webserver, request * r)
         httpdOutput(r, "Both the token and MAC need to be specified");
         return;
     }*/
-
     return;
 }
 
