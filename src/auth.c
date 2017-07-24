@@ -105,7 +105,7 @@ logout_client(t_client * client)
         auth_server_request(&authresponse, REQUEST_TYPE_LOGOUT,
                             client->ip, client->mac, client->token,
                             client->counters.incoming, client->counters.outgoing, client->counters.incoming_delta, client->counters.outgoing_delta);
-
+                    debug(LOG_WARNING, "logger out successfully"); 
         if (authresponse.authcode == AUTH_ERROR)
             debug(LOG_WARNING, "Auth server error when reporting logout");
         LOCK_CLIENT_LIST();
@@ -176,6 +176,9 @@ authenticate_client(request * r)
         /* If token changed, save it. */
         free(client->token);
         client->token = token;
+	client->counters.incoming_history = 0;//-(client->counters.incoming);
+	client->counters.outgoing_history = 0;//-(client->counters.outgoing);
+        client->counters.incoming = client->counters.outgoing = 0;
     } else {
         free(token);
     }
