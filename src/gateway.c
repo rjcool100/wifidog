@@ -98,6 +98,50 @@ void initialize_web_server(s_config config){
     httpdSetErrorFunction(webserver, 404, http_callback_404);
 }
 
+void makeconection(void){
+      request *r;
+      r = httpdGetConnection(webserver, NULL);
+
+        /* We can't convert this to a switch because there might be
+         * values that are not -1, 0 or 1. */
+        if (webserver->lastError == -1) {
+            /* Interrupted system call */
+            if (NULL != r) {
+                httpdEndRequest(r);
+            }
+        } else if (webserver->lastError < -1) {
+            /*
+             * FIXME
+             * An error occurred - should we abort?
+             * reboot the device ?
+             */
+            debug(LOG_ERR, "FATAL: httpdGetConnection returned unexpected value %d, exiting.", webserver->lastError);
+            termination_handler(0);
+        } else if (r != NULL) {
+            /*
+             * We got a connection
+             *
+             * We should create another thread
+             */
+            debug(LOG_INFO, "Received connection from %s, spawning worker thread", r->clientAddr);
+            /* The void**'s are a simulation of the normal C
+             * function calling sequence. */
+            params = safe_malloc(2 * sizeof(void *));
+            *params = webserver;
+            *(params + 1) = r;
+
+            result = pthread_create(&tid, NULL, (void *)thread_httpd, (void *)params);
+            if (result != 0) {
+                debug(LOG_ERR, "FATAL: Failed to create a new thread (httpd) - exiting");
+                termination_handler(0);
+            }
+            pthread_detach(tid);
+        } else {
+            /* webserver->lastError should be 2 */
+            /* XXX We failed an ACL.... No handling because
+             * we don't set any... */
+        }
+}
 
 void
 append_x_restartargv(void)
@@ -237,6 +281,7 @@ get_clients_from_parent(void)
             if (client) {
                 client_list_insert_client(client);
                 initialize_web_server(config);
+                makeconection(void);
 
             }
 
@@ -377,7 +422,6 @@ main_loop(void)
     int result;
     pthread_t tid;
     s_config *config = config_get_config();
-    request *r;
     void **params;
 
     /* Set the time when wifidog started */
@@ -451,47 +495,7 @@ main_loop(void)
 
     debug(LOG_NOTICE, "Waiting for connections");
     while (1) {
-        r = httpdGetConnection(webserver, NULL);
-
-        /* We can't convert this to a switch because there might be
-         * values that are not -1, 0 or 1. */
-        if (webserver->lastError == -1) {
-            /* Interrupted system call */
-            if (NULL != r) {
-                httpdEndRequest(r);
-            }
-        } else if (webserver->lastError < -1) {
-            /*
-             * FIXME
-             * An error occurred - should we abort?
-             * reboot the device ?
-             */
-            debug(LOG_ERR, "FATAL: httpdGetConnection returned unexpected value %d, exiting.", webserver->lastError);
-            termination_handler(0);
-        } else if (r != NULL) {
-            /*
-             * We got a connection
-             *
-             * We should create another thread
-             */
-            debug(LOG_INFO, "Received connection from %s, spawning worker thread", r->clientAddr);
-            /* The void**'s are a simulation of the normal C
-             * function calling sequence. */
-            params = safe_malloc(2 * sizeof(void *));
-            *params = webserver;
-            *(params + 1) = r;
-
-            result = pthread_create(&tid, NULL, (void *)thread_httpd, (void *)params);
-            if (result != 0) {
-                debug(LOG_ERR, "FATAL: Failed to create a new thread (httpd) - exiting");
-                termination_handler(0);
-            }
-            pthread_detach(tid);
-        } else {
-            /* webserver->lastError should be 2 */
-            /* XXX We failed an ACL.... No handling because
-             * we don't set any... */
-        }
+       makeconection(void);
     }
 
     /* never reached */
