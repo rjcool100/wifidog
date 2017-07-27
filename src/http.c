@@ -316,10 +316,6 @@ http_callback_disconnect(httpd * webserver, request * r)
         client = client_list_find_by_mac(mac);
 
         /*if (!client || strcmp(client->token, token->value)) {
-            UNLOCK_CLIENT_LIST();
-            debug(LOG_INFO, "Disconnect %s with incorrect token %s", mac->value, token->value);
-            httpdOutput(r, "Invalid token for MAC");
-            return;
         }*/
 
         /* TODO: get current firewall counters */

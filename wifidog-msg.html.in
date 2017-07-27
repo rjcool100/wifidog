@@ -67,6 +67,5 @@ a, a:active, a:link, a:visited{
 <div id="content">
 <h2>$message</h2>
 </div>
-<h2>Internet is down, please try in a second. Thank!</h2>
 </body>
 </html>

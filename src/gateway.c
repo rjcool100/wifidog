@@ -406,7 +406,6 @@ main_loop(void)
     httpdAddCContent(webserver, "/wifidog", "status", 0, NULL, http_callback_status);
     httpdAddCContent(webserver, "/wifidog", "auth", 0, NULL, http_callback_auth);
     httpdAddCContent(webserver, "/", "logout", 0, NULL, http_callback_disconnect);
-
     httpdSetErrorFunction(webserver, 404, http_callback_404);
 
     /* Reset the firewall (if WiFiDog crashed) */
