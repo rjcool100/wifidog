@@ -79,7 +79,7 @@ httpd * webserver = NULL;
  * and this function static there? -Alex @ 8oct2006
  */
 
-void initialize_web_server(s_config config){
+void initialize_web_server(s_config *config){
     debug(LOG_NOTICE, "Creating web server on %s:%d", config->gw_address, config->gw_port);
     if ((webserver = httpdCreate(config->gw_address, config->gw_port)) == NULL) {
         debug(LOG_ERR, "Could not create web server: %s", strerror(errno));
