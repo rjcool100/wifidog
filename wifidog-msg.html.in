@@ -1,9 +1,71 @@
 <html>
 <head>
+<title>i2e1</title>
+<meta HTTP-EQUIV='Pragma' CONTENT='no-cache'>
 
+<style>
+body {
+  margin: 10px 60px 0 60px; 
+  font-family : bitstream vera sans, sans-serif;
+  color: #666;
+}
+
+a, a:active, a:link, a:visited{
+  color: #0f2e78;
+}
+
+#header {
+  height: 30px;
+  background-color: #DCE8F3;
+  padding: 20px;
+  font-size: 20pt;
+  text-align: center;
+  border: 1px solid #070e92;
+  border-bottom: 0;
+}
+
+#header h2 {
+  margin: 0pt;
+}
+
+#menu {
+  width: 200px;
+  float: right;
+  background-color: #DCE8F3;
+  border: 1px solid #070e92;
+  font-size: 80%;
+  min-height: 300px;
+}
+
+#menu h2 {
+  margin: 0;
+  background-color: #345562;
+  text-align: center;
+  color: #FFF;
+}
+
+#content {
+  padding: 20px;
+  border: 1px solid #070e92;
+  min-height: 300px;
+}
+</style>
 </head>
 
 <body>
-<h2>Internet is down, please try in a second. Thank!</h2>
+<div id="header">
+    <h2>i2e1</h2>
+</div>
+
+<div id="menu">
+    <h2>Menu</h2>
+    <ul>
+    <li><a href='http://www.i2e1.com'>i2e1 Homepage</a>
+    </ul>
+</div>
+
+<div id="content">
+<h2>$message</h2>
+</div>
 </body>
 </html>

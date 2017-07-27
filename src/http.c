@@ -105,6 +105,10 @@ http_callback_404(httpd * webserver, request * r, int error_code)
     } else {
         /* Re-direct them to auth server */
         char *urlFragment;
+	char current_res[10];
+	current_res[0] = '\0';
+	if(error_code == 2) strcpy(current_res, "logoff");
+	else strcpy(current_res, "notyet");
 
         if (!(mac = arp_get(r->clientAddr))) {
             /* We could not get their MAC address */
@@ -115,8 +119,8 @@ http_callback_404(httpd * webserver, request * r, int error_code)
                           config->gw_id, r->clientAddr, url);
         } else {
             debug(LOG_INFO, "Got client MAC address for ip %s: %s", r->clientAddr, mac);
-            safe_asprintf(&urlFragment, "%sgw_address=%s&gw_port=%d&gw_id=%s&ip=%s&mac=%s&url=%s",
-                          auth_server->authserv_login_script_path_fragment,
+            safe_asprintf(&urlFragment, "%sres=%s&gw_address=%s&gw_port=%d&gw_id=%s&ip=%s&mac=%s&url=%s",
+                          auth_server->authserv_login_script_path_fragment, current_res,
                           config->gw_address, config->gw_port, config->gw_id, r->clientAddr, mac, url);
             free(mac);
         }
@@ -293,8 +297,9 @@ http_callback_disconnect(httpd * webserver, request * r)
 {
     const s_config *config = config_get_config();
     /* XXX How do you change the status code for the response?? */
-    httpVar *token = httpdGetVariableByName(r, "token");
-    httpVar *mac = httpdGetVariableByName(r, "mac");
+    //httpVar *token = httpdGetVariableByName(r, "token");
+    //httpVar *mac = httpdGetVariableByName(r, "mac");
+    char *mac = arp_get(r->clientAddr);
 
     if (config->httpdusername &&
         (strcmp(config->httpdusername, r->request.authUser) ||
@@ -304,29 +309,34 @@ http_callback_disconnect(httpd * webserver, request * r)
         return;
     }
 
-    if (token && mac) {
+    //if (token && mac) {
         t_client *client;
 
         LOCK_CLIENT_LIST();
-        client = client_list_find_by_mac(mac->value);
+        client = client_list_find_by_mac(mac);
 
-        if (!client || strcmp(client->token, token->value)) {
-            UNLOCK_CLIENT_LIST();
-            debug(LOG_INFO, "Disconnect %s with incorrect token %s", mac->value, token->value);
-            httpdOutput(r, "Invalid token for MAC");
-            return;
-        }
+        /*if (!client || strcmp(client->token, token->value)) {
+        }*/
 
         /* TODO: get current firewall counters */
-        logout_client(client);
-        UNLOCK_CLIENT_LIST();
+	        debug(LOG_INFO, "Now fetching counters. mac=%s", mac);
+        if(client == NULL)
+		debug(LOG_INFO, "Client is null");
+        else{
 
-    } else {
+		//iptables_fw_single_counter_update(client);
+		debug(LOG_INFO, "Fetched counters. Now logging out");
+        	logout_client(client);
+	}
+        UNLOCK_CLIENT_LIST();
+	http_callback_404(webserver, r, 2);
+
+    /*} else {
+
         debug(LOG_INFO, "Disconnect called without both token and MAC given");
         httpdOutput(r, "Both the token and MAC need to be specified");
         return;
-    }
-
+    }*/
     return;
 }
 

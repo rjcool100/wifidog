@@ -93,7 +93,7 @@ void initialize_web_server(s_config config){
     httpdAddCContent(webserver, "/wifidog", "about", 0, NULL, http_callback_about);
     httpdAddCContent(webserver, "/wifidog", "status", 0, NULL, http_callback_status);
     httpdAddCContent(webserver, "/wifidog", "auth", 0, NULL, http_callback_auth);
-    httpdAddCContent(webserver, "/wifidog", "disconnect", 0, NULL, http_callback_disconnect);
+    httpdAddCContent(webserver, "/", "logout", 0, NULL, http_callback_disconnect);
 
     httpdSetErrorFunction(webserver, 404, http_callback_404);
 }
@@ -433,8 +433,8 @@ main_loop(void)
         started_time = time(NULL);
     }
 
-    /* save the pid file if needed */
-    if ((!config) && (!config->pidfile))
+	/* save the pid file if needed */
+    if (config && config->pidfile)
         save_pid_file(config->pidfile);
 
     /* If we don't have the Gateway IP address, get it. Can't fail. */

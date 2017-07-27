@@ -71,6 +71,7 @@ iptables_insert_gateway_id(char **input)
     char *token;
     const s_config *config;
     char *buffer;
+    char *tmp_intf;
 
     if (strstr(*input, "$ID$") == NULL)
         return;
@@ -80,9 +81,14 @@ iptables_insert_gateway_id(char **input)
         memcpy(token, "%1$s", 4);
 
     config = config_get_config();
-    safe_asprintf(&buffer, *input, config->gw_interface);
+    tmp_intf = safe_strdup(config->gw_interface);
+    if (strlen(tmp_intf) > CHAIN_NAME_MAX_LEN) {
+        *(tmp_intf + CHAIN_NAME_MAX_LEN) = '\0';
+    }
+    safe_asprintf(&buffer, *input, tmp_intf);
 
-    free(*input);
+    free(tmp_intf);
+    free(*input);  /* Not an error, input from safe_asprintf */
     *input = buffer;
 }
 
@@ -358,14 +364,14 @@ iptables_fw_init(void)
     /* Insert at the beginning */
     iptables_do_command("-t filter -I FORWARD -i %s -j " CHAIN_TO_INTERNET, config->gw_interface);
 
-    iptables_do_command("-t filter -A " CHAIN_TO_INTERNET " -m conntrack --ctstate INVALID -j DROP");
+    iptables_do_command("-t filter -A " CHAIN_TO_INTERNET " -m state --state INVALID -j DROP");
 
     /* XXX: Why this? it means that connections setup after authentication
        stay open even after the connection is done... 
-       iptables_do_command("-t filter -A " CHAIN_TO_INTERNET " -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT"); */
+       iptables_do_command("-t filter -A " CHAIN_TO_INTERNET " -m state --state RELATED,ESTABLISHED -j ACCEPT"); */
 
     //Won't this rule NEVER match anyway?!?!? benoitg, 2007-06-23
-    //iptables_do_command("-t filter -A " CHAIN_TO_INTERNET " -i %s -m conntrack --ctstate NEW -j DROP", ext_interface);
+    //iptables_do_command("-t filter -A " CHAIN_TO_INTERNET " -i %s -m state --state NEW -j DROP", ext_interface);
 
     /* TCPMSS rule for PPPoE */
     iptables_do_command("-t filter -A " CHAIN_TO_INTERNET
@@ -635,7 +641,7 @@ iptables_fw_counters_update(void)
     struct in_addr tempaddr;
 
     /* Look for outgoing traffic */
-    safe_asprintf(&script, "%s %s", "iptables", "-v -n -x -t mangle -L " CHAIN_OUTGOING);
+    safe_asprintf(&script, "iptables -t %s -L %s %s", "mangle", CHAIN_OUTGOING, "-v -n -x");
     iptables_insert_gateway_id(&script);
     output = popen(script, "r");
     free(script);
@@ -681,7 +687,7 @@ iptables_fw_counters_update(void)
     pclose(output);
 
     /* Look for incoming traffic */
-    safe_asprintf(&script, "%s %s", "iptables", "-v -n -x -t mangle -L " CHAIN_INCOMING);
+    safe_asprintf(&script, "iptables -t %s -L %s %s", "mangle", CHAIN_INCOMING, "-v -n -x");
     iptables_insert_gateway_id(&script);
     output = popen(script, "r");
     free(script);
@@ -708,6 +714,111 @@ iptables_fw_counters_update(void)
                     p1->counters.incoming_delta = p1->counters.incoming_history + counter - p1->counters.incoming;
                     p1->counters.incoming = p1->counters.incoming_history + counter;
                     debug(LOG_DEBUG, "%s - Incoming traffic %llu bytes, Updated counter.incoming to %llu bytes", ip, counter, p1->counters.incoming);
+                }
+            } else {
+                debug(LOG_ERR,
+                      "iptables_fw_counters_update(): Could not find %s in client list, this should not happen unless if the gateway crashed",
+                      ip);
+                debug(LOG_ERR, "Preventively deleting firewall rules for %s in table %s", ip, CHAIN_OUTGOING);
+                iptables_fw_destroy_mention("mangle", CHAIN_OUTGOING, ip);
+                debug(LOG_ERR, "Preventively deleting firewall rules for %s in table %s", ip, CHAIN_INCOMING);
+                iptables_fw_destroy_mention("mangle", CHAIN_INCOMING, ip);
+            }
+            UNLOCK_CLIENT_LIST();
+        }
+    }
+    pclose(output);
+
+    return 1;
+}
+
+/** Update the counters of single client in the client list */
+int
+iptables_fw_single_counter_update(t_client *client)
+{
+    FILE *output;
+    char *script, ip[16], rc;
+    unsigned long long int counter;
+    struct in_addr tempaddr;
+
+    /* Look for outgoing traffic */
+    safe_asprintf(&script, "iptables -t %s -L %s %s | grep %s", "mangle", CHAIN_OUTGOING, "-v -n -x", client->ip);
+
+    iptables_insert_gateway_id(&script);
+ debug(LOG_ERR, script);
+    output = popen(script, "r");
+    free(script);
+    if (!output) {
+        debug(LOG_ERR, "popen(): %s", strerror(errno));
+        return -1;
+    }
+
+    /* skip the first two lines */
+    //while (('\n' != fgetc(output)) && !feof(output)) ;
+    //while (('\n' != fgetc(output)) && !feof(output)) ;
+    while (output && !(feof(output))) {
+debug(LOG_INFO, output);
+        rc = fscanf(output, "%*s %llu %*s %*s %*s %*s %*s %15[0-9.] %*s %*s %*s %*s %*s %*s", &counter, ip);
+        //rc = fscanf(output, "%*s %llu %*s %*s %*s %*s %*s %15[0-9.] %*s %*s %*s %*s %*s 0x%*u", &counter, ip);
+        if (2 == rc && EOF != rc) {
+            /* Sanity */
+            if (!inet_aton(ip, &tempaddr)) {
+                debug(LOG_WARNING, "I was supposed to read an IP address but instead got [%s] - ignoring it", ip);
+                continue;
+            }
+            debug(LOG_DEBUG, "Read outgoing traffic for %s: Bytes=%llu", ip, counter);
+            LOCK_CLIENT_LIST();
+            if (strcmp(client->ip, ip) == 0) {
+                if ((client->counters.outgoing - client->counters.outgoing_history) < counter) {
+                    client->counters.outgoing_delta = client->counters.outgoing_history + counter - client->counters.outgoing;
+                    client->counters.outgoing = client->counters.outgoing_history + counter;
+                    client->counters.last_updated = time(NULL);
+                    debug(LOG_DEBUG, "%s - Outgoing traffic %llu bytes, updated counter.outgoing to %llu bytes.  Updated last_updated to %d", ip,
+                          counter, client->counters.outgoing, client->counters.last_updated);
+                }
+            } else {
+                debug(LOG_ERR,
+                      "iptables_fw_counters_update(): Could not find %s in client list, this should not happen unless if the gateway crashed",
+                      ip);
+                debug(LOG_ERR, "Preventively deleting firewall rules for %s in table %s", ip, CHAIN_OUTGOING);
+                iptables_fw_destroy_mention("mangle", CHAIN_OUTGOING, ip);
+                debug(LOG_ERR, "Preventively deleting firewall rules for %s in table %s", ip, CHAIN_INCOMING);
+                iptables_fw_destroy_mention("mangle", CHAIN_INCOMING, ip);
+            }
+            UNLOCK_CLIENT_LIST();
+        }
+    }
+    pclose(output);
+
+    /* Look for incoming traffic */
+    safe_asprintf(&script, "iptables -t %s -L %s %s | grep %s", "mangle", CHAIN_INCOMING, "-v -n -x", client->ip);
+    iptables_insert_gateway_id(&script);
+ debug(LOG_ERR, script);
+    output = popen(script, "r");
+    free(script);
+    if (!output) {
+        debug(LOG_ERR, "popen(): %s", strerror(errno));
+        return -1;
+    }
+
+    /* skip the first two lines */
+    //while (('\n' != fgetc(output)) && !feof(output)) ;
+    //while (('\n' != fgetc(output)) && !feof(output)) ;
+    while (output && !(feof(output))) {
+        rc = fscanf(output, "%*s %llu %*s %*s %*s %*s %*s %*s %15[0-9.]", &counter, ip);
+        if (2 == rc && EOF != rc) {
+            /* Sanity */
+            if (!inet_aton(ip, &tempaddr)) {
+                debug(LOG_WARNING, "I was supposed to read an IP address but instead got [%s] - ignoring it", ip);
+                continue;
+            }
+            debug(LOG_DEBUG, "Read incoming traffic for %s: Bytes=%llu", ip, counter);
+            LOCK_CLIENT_LIST();
+            if (strcmp(client->ip, ip) == 0) {
+                if ((client->counters.incoming - client->counters.incoming_history) < counter) {
+                    client->counters.incoming_delta = client->counters.incoming_history + counter - client->counters.incoming;
+                    client->counters.incoming = client->counters.incoming_history + counter;
+                    debug(LOG_DEBUG, "%s - Incoming traffic %llu bytes, Updated counter.incoming to %llu bytes", ip, counter, client->counters.incoming);
                 }
             } else {
                 debug(LOG_ERR,

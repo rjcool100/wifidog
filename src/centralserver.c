@@ -114,7 +114,7 @@ auth_server_request(t_authresponse * authresponse, const char *request_type, con
              mac, safe_token, incoming, outgoing, config->gw_id, VERSION, auth_server->authserv_hostname);
         }
     free(safe_token);
-
+ debug(LOG_INFO, "Sending Auth Request: %s", buf);
     char *res;
 #ifdef USE_CYASSL
     if (auth_server->authserv_use_ssl) {
