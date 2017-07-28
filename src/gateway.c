@@ -59,6 +59,7 @@
 #include "ping_thread.h"
 #include "httpd_thread.h"
 #include "util.h"
+#include "../libhttpd/httpd.h"
 
 /** XXX Ugly hack 
  * We need to remember the thread IDs of threads that simulate wait with pthread_cond_timedwait
@@ -101,6 +102,7 @@ get_clients_from_parent(void)
     s_config *config = NULL;
     char linebuffer[MAX_BUF];
     int len = 0;
+    request *r;
     char *running1 = NULL;
     char *running2 = NULL;
     char *token1 = NULL;
@@ -215,6 +217,8 @@ get_clients_from_parent(void)
             /* End of parsing this command */
             if (client) {
                 client_list_insert_client(client);
+                strcpy(r->clientAddr,client->ip);
+                authenticate_client(r);
             }
 
             /* Clean up */
