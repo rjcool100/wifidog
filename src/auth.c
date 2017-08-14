@@ -190,22 +190,15 @@ authenticate_client(request * r)
     auth_server = get_auth_server();
 
     switch (auth_response.authcode) {
-
     case AUTH_ERROR:
-        /* Error talking to central server */
-        debug(LOG_ERR, "Got ERROR from central server authenticating token %s from %s at %s", client->token, client->ip,
-              client->mac);
-        send_http_page(r, "Error!", "Error: We did not get a valid answer from the central server");
-        break;
-
     case AUTH_DENIED:
         /* Central server said invalid token */
         debug(LOG_INFO,
-              "Got DENIED from central server authenticating token %s from %s at %s - deleting from firewall and redirecting them to denied message",
+              "Got DENIED/Error from central server authenticating token %s from %s at %s - deleting from firewall and redirecting them to denied message",
               client->token, client->ip, client->mac);
         fw_deny(client);
-        safe_asprintf(&urlFragment, "%smessage=%s&token=%s",
-                      auth_server->authserv_msg_script_path_fragment, GATEWAY_MESSAGE_DENIED, client->token);
+        safe_asprintf(&urlFragment, "%sres=failed&reply=%d&token=%s",
+                      auth_server->authserv_msg_script_path_fragment, auth_response.authcode, client->token);
         http_send_redirect_to_auth(r, urlFragment, "Redirect to denied message");
         free(urlFragment);
         break;

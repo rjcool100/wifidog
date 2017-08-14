@@ -67,7 +67,9 @@
  */
 static pthread_t tid_fw_counter = 0;
 static pthread_t tid_ping = 0;
-
+pthread_t tid = 0;
+void **params = 0;
+int result;
 time_t started_time = 0;
 
 /* The internal web server */
@@ -79,6 +81,71 @@ httpd * webserver = NULL;
  * Why is restartargv global? Shouldn't it be at most static to commandline.c
  * and this function static there? -Alex @ 8oct2006
  */
+
+void initialize_web_server(s_config *config){
+    debug(LOG_NOTICE, "Creating web server on %s:%d", config->gw_address, config->gw_port);
+    if ((webserver = httpdCreate(config->gw_address, config->gw_port)) == NULL) {
+        debug(LOG_ERR, "Could not create web server: %s", strerror(errno));
+        exit(1);
+    }
+    register_fd_cleanup_on_fork(webserver->serverSock);
+
+    debug(LOG_DEBUG, "Assigning callbacks to web server");
+    httpdAddCContent(webserver, "/", "wifidog", 0, NULL, http_callback_wifidog);
+    httpdAddCContent(webserver, "/wifidog", "", 0, NULL, http_callback_wifidog);
+    httpdAddCContent(webserver, "/wifidog", "about", 0, NULL, http_callback_about);
+    httpdAddCContent(webserver, "/wifidog", "status", 0, NULL, http_callback_status);
+    httpdAddCContent(webserver, "/wifidog", "auth", 0, NULL, http_callback_auth);
+    httpdAddCContent(webserver, "/", "logout", 0, NULL, http_callback_disconnect);
+
+    httpdSetErrorFunction(webserver, 404, http_callback_404);
+}
+
+void makeconection(){
+      request *r;
+      r = httpdGetConnection(webserver, NULL);
+
+        /* We can't convert this to a switch because there might be
+         * values that are not -1, 0 or 1. */
+        if (webserver->lastError == -1) {
+            /* Interrupted system call */
+            if (NULL != r) {
+                httpdEndRequest(r);
+            }
+        } else if (webserver->lastError < -1) {
+            /*
+             * FIXME
+             * An error occurred - should we abort?
+             * reboot the device ?
+             */
+            debug(LOG_ERR, "FATAL: httpdGetConnection returned unexpected value %d, exiting.", webserver->lastError);
+            termination_handler(0);
+        } else if (r != NULL) {
+            /*
+             * We got a connection
+             *
+             * We should create another thread
+             */
+            debug(LOG_INFO, "Received connection from %s, spawning worker thread", r->clientAddr);
+            /* The void**'s are a simulation of the normal C
+             * function calling sequence. */
+            params = safe_malloc(2 * sizeof(void *));
+            *params = webserver;
+            *(params + 1) = r;
+
+            result = pthread_create(&tid, NULL, (void *)thread_httpd, (void *)params);
+            if (result != 0) {
+                debug(LOG_ERR, "FATAL: Failed to create a new thread (httpd) - exiting");
+                termination_handler(0);
+            }
+            pthread_detach(tid);
+        } else {
+            /* webserver->lastError should be 2 */
+            /* XXX We failed an ACL.... No handling because
+             * we don't set any... */
+        }
+}
+
 void
 append_x_restartargv(void)
 {
@@ -86,7 +153,7 @@ append_x_restartargv(void)
 
     for (i = 0; restartargv[i]; i++) ;
 
-    restartargv[i++] = safe_strdup("-x");
+        restartargv[i++] = safe_strdup("-x");
     safe_asprintf(&(restartargv[i++]), "%d", getpid());
 }
 
@@ -208,7 +275,7 @@ get_clients_from_parent(void)
                             client->counters.last_updated = atol(value);
                         } else {
                             debug(LOG_NOTICE, "I don't know how to inherit key [%s] value [%s] from parent", key,
-                                  value);
+                              value);
                         }
                     }
                 }
@@ -355,11 +422,7 @@ init_signals(void)
 static void
 main_loop(void)
 {
-    int result;
-    pthread_t tid;
     s_config *config = config_get_config();
-    request *r;
-    void **params;
 
     /* Set the time when wifidog started */
     if (!started_time) {
@@ -396,21 +459,7 @@ main_loop(void)
     }
 
     /* Initializes the web server */
-    debug(LOG_NOTICE, "Creating web server on %s:%d", config->gw_address, config->gw_port);
-    if ((webserver = httpdCreate(config->gw_address, config->gw_port)) == NULL) {
-        debug(LOG_ERR, "Could not create web server: %s", strerror(errno));
-        exit(1);
-    }
-    register_fd_cleanup_on_fork(webserver->serverSock);
-
-    debug(LOG_DEBUG, "Assigning callbacks to web server");
-    httpdAddCContent(webserver, "/", "wifidog", 0, NULL, http_callback_wifidog);
-    httpdAddCContent(webserver, "/wifidog", "", 0, NULL, http_callback_wifidog);
-    httpdAddCContent(webserver, "/wifidog", "about", 0, NULL, http_callback_about);
-    httpdAddCContent(webserver, "/wifidog", "status", 0, NULL, http_callback_status);
-    httpdAddCContent(webserver, "/wifidog", "auth", 0, NULL, http_callback_auth);
-    httpdAddCContent(webserver, "/", "logout", 0, NULL, http_callback_disconnect);
-    httpdSetErrorFunction(webserver, 404, http_callback_404);
+    initialize_web_server(config);
 
     /* Reset the firewall (if WiFiDog crashed) */
     fw_destroy();
@@ -446,47 +495,7 @@ main_loop(void)
 
     debug(LOG_NOTICE, "Waiting for connections");
     while (1) {
-        r = httpdGetConnection(webserver, NULL);
-
-        /* We can't convert this to a switch because there might be
-         * values that are not -1, 0 or 1. */
-        if (webserver->lastError == -1) {
-            /* Interrupted system call */
-            if (NULL != r) {
-                httpdEndRequest(r);
-            }
-        } else if (webserver->lastError < -1) {
-            /*
-             * FIXME
-             * An error occurred - should we abort?
-             * reboot the device ?
-             */
-            debug(LOG_ERR, "FATAL: httpdGetConnection returned unexpected value %d, exiting.", webserver->lastError);
-            termination_handler(0);
-        } else if (r != NULL) {
-            /*
-             * We got a connection
-             *
-             * We should create another thread
-             */
-            debug(LOG_INFO, "Received connection from %s, spawning worker thread", r->clientAddr);
-            /* The void**'s are a simulation of the normal C
-             * function calling sequence. */
-            params = safe_malloc(2 * sizeof(void *));
-            *params = webserver;
-            *(params + 1) = r;
-
-            result = pthread_create(&tid, NULL, (void *)thread_httpd, (void *)params);
-            if (result != 0) {
-                debug(LOG_ERR, "FATAL: Failed to create a new thread (httpd) - exiting");
-                termination_handler(0);
-            }
-            pthread_detach(tid);
-        } else {
-            /* webserver->lastError should be 2 */
-            /* XXX We failed an ACL.... No handling because
-             * we don't set any... */
-        }
+       makeconection();
     }
 
     /* never reached */

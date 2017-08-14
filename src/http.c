@@ -76,8 +76,8 @@ http_callback_404(httpd * webserver, request * r, int error_code)
              r->request.host, r->request.path, r->request.query[0] ? "?" : "", r->request.query);
     url = httpdUrlEncode(tmp_url);
 
-    if (!is_online()) {
-        /* The internet connection is down at the moment  - apologize and do not redirect anywhere */
+    /*if (!is_online()) {
+        // The internet connection is down at the moment  - apologize and do not redirect anywhere 
         char *buf;
         safe_asprintf(&buf,
                       "<p>We apologize, but it seems that the internet connection that powers this hotspot is temporarily unavailable.</p>"
@@ -90,7 +90,7 @@ http_callback_404(httpd * webserver, request * r, int error_code)
         debug(LOG_INFO, "Sent %s an apology since I am not online - no point sending them to auth server",
               r->clientAddr);
     } else if (!is_auth_online()) {
-        /* The auth server is down at the moment - apologize and do not redirect anywhere */
+        // The auth server is down at the moment - apologize and do not redirect anywhere 
         char *buf;
         safe_asprintf(&buf,
                       "<p>We apologize, but it seems that we are currently unable to re-direct you to the login screen.</p>"
@@ -103,6 +103,7 @@ http_callback_404(httpd * webserver, request * r, int error_code)
         debug(LOG_INFO, "Sent %s an apology since auth server not online - no point sending them to auth server",
               r->clientAddr);
     } else {
+*/
         /* Re-direct them to auth server */
         char *urlFragment;
 	char current_res[10];
@@ -166,7 +167,7 @@ http_callback_404(httpd * webserver, request * r, int error_code)
         debug(LOG_INFO, "Captured %s requesting [%s] and re-directing them to login page", r->clientAddr, url);
         http_send_redirect_to_auth(r, urlFragment, "Redirect to login page");
         free(urlFragment);
-    }
+  //  }
     free(url);
 }
 
