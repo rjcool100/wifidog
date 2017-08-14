@@ -66,7 +66,9 @@
  */
 static pthread_t tid_fw_counter = 0;
 static pthread_t tid_ping = 0;
-
+pthread_t tid = 0;
+void **params = 0;
+int result;
 time_t started_time = 0;
 
 /* The internal web server */
@@ -98,7 +100,7 @@ void initialize_web_server(s_config *config){
     httpdSetErrorFunction(webserver, 404, http_callback_404);
 }
 
-void makeconection(void){
+void makeconection(){
       request *r;
       r = httpdGetConnection(webserver, NULL);
 
@@ -281,7 +283,7 @@ get_clients_from_parent(void)
             if (client) {
                 client_list_insert_client(client);
                 initialize_web_server(config);
-                makeconection(void);
+                makeconection();
 
             }
 
@@ -419,10 +421,7 @@ init_signals(void)
 static void
 main_loop(void)
 {
-    int result;
-    pthread_t tid;
     s_config *config = config_get_config();
-    void **params;
 
     /* Set the time when wifidog started */
     if (!started_time) {
@@ -495,7 +494,7 @@ main_loop(void)
 
     debug(LOG_NOTICE, "Waiting for connections");
     while (1) {
-       makeconection(void);
+       makeconection();
     }
 
     /* never reached */

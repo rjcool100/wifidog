@@ -323,22 +323,22 @@ iptables_fw_init(void)
     if ((proxy_port = config_get_config()->proxy_port) != 0) {
         debug(LOG_DEBUG, "Proxy port set, setting proxy rule");
         iptables_do_command("-t nat -A " CHAIN_TO_INTERNET
-                            " -p tcp --dport 80 -m mark --mark 0x%u -j REDIRECT --to-port %u", FW_MARK_KNOWN,
+                            " -p tcp --dport 80 -m mark --mark 0x%u/0x00ff -j REDIRECT --to-port %u", FW_MARK_KNOWN,
                             proxy_port);
         iptables_do_command("-t nat -A " CHAIN_TO_INTERNET
-                            " -p tcp --dport 80 -m mark --mark 0x%u -j REDIRECT --to-port %u", FW_MARK_PROBATION,
+                            " -p tcp --dport 80 -m mark --mark 0x%u/0x00ff -j REDIRECT --to-port %u", FW_MARK_PROBATION,
                             proxy_port);
     }
 
-    iptables_do_command("-t nat -A " CHAIN_TO_INTERNET " -m mark --mark 0x%u -j ACCEPT", FW_MARK_KNOWN);
-    iptables_do_command("-t nat -A " CHAIN_TO_INTERNET " -m mark --mark 0x%u -j ACCEPT", FW_MARK_PROBATION);
+    iptables_do_command("-t nat -A " CHAIN_TO_INTERNET " -m mark --mark 0x%u/0x00ff -j ACCEPT", FW_MARK_KNOWN);
+    iptables_do_command("-t nat -A " CHAIN_TO_INTERNET " -m mark --mark 0x%u/0x00ff -j ACCEPT", FW_MARK_PROBATION);
     iptables_do_command("-t nat -A " CHAIN_TO_INTERNET " -j " CHAIN_UNKNOWN);
 
     iptables_do_command("-t nat -A " CHAIN_UNKNOWN " -j " CHAIN_AUTHSERVERS);
     iptables_do_command("-t nat -A " CHAIN_UNKNOWN " -j " CHAIN_GLOBAL);
     if (got_authdown_ruleset) {
         iptables_do_command("-t nat -A " CHAIN_UNKNOWN " -j " CHAIN_AUTH_IS_DOWN);
-        iptables_do_command("-t nat -A " CHAIN_AUTH_IS_DOWN " -m mark --mark 0x%u -j ACCEPT", FW_MARK_AUTH_IS_DOWN);
+        iptables_do_command("-t nat -A " CHAIN_AUTH_IS_DOWN " -m mark --mark 0x%u/0x00ff -j ACCEPT", FW_MARK_AUTH_IS_DOWN);
     }
     iptables_do_command("-t nat -A " CHAIN_UNKNOWN " -p tcp --dport 80 -j REDIRECT --to-ports %d", gw_port);
 
@@ -380,21 +380,21 @@ iptables_fw_init(void)
     iptables_do_command("-t filter -A " CHAIN_TO_INTERNET " -j " CHAIN_AUTHSERVERS);
     iptables_fw_set_authservers();
 
-    iptables_do_command("-t filter -A " CHAIN_TO_INTERNET " -m mark --mark 0x%u -j " CHAIN_LOCKED, FW_MARK_LOCKED);
+    iptables_do_command("-t filter -A " CHAIN_TO_INTERNET " -m mark --mark 0x%u/0x00ff -j " CHAIN_LOCKED, FW_MARK_LOCKED);
     iptables_load_ruleset("filter", FWRULESET_LOCKED_USERS, CHAIN_LOCKED);
 
     iptables_do_command("-t filter -A " CHAIN_TO_INTERNET " -j " CHAIN_GLOBAL);
     iptables_load_ruleset("filter", FWRULESET_GLOBAL, CHAIN_GLOBAL);
     iptables_load_ruleset("nat", FWRULESET_GLOBAL, CHAIN_GLOBAL);
 
-    iptables_do_command("-t filter -A " CHAIN_TO_INTERNET " -m mark --mark 0x%u -j " CHAIN_VALIDATE, FW_MARK_PROBATION);
+    iptables_do_command("-t filter -A " CHAIN_TO_INTERNET " -m mark --mark 0x%u/0x00ff -j " CHAIN_VALIDATE, FW_MARK_PROBATION);
     iptables_load_ruleset("filter", FWRULESET_VALIDATING_USERS, CHAIN_VALIDATE);
 
-    iptables_do_command("-t filter -A " CHAIN_TO_INTERNET " -m mark --mark 0x%u -j " CHAIN_KNOWN, FW_MARK_KNOWN);
+    iptables_do_command("-t filter -A " CHAIN_TO_INTERNET " -m mark --mark 0x%u/0x00ff -j " CHAIN_KNOWN, FW_MARK_KNOWN);
     iptables_load_ruleset("filter", FWRULESET_KNOWN_USERS, CHAIN_KNOWN);
 
     if (got_authdown_ruleset) {
-        iptables_do_command("-t filter -A " CHAIN_TO_INTERNET " -m mark --mark 0x%u -j " CHAIN_AUTH_IS_DOWN,
+        iptables_do_command("-t filter -A " CHAIN_TO_INTERNET " -m mark --mark 0x%u/0x00ff -j " CHAIN_AUTH_IS_DOWN,
                             FW_MARK_AUTH_IS_DOWN);
         iptables_load_ruleset("filter", FWRULESET_AUTH_IS_DOWN, CHAIN_AUTH_IS_DOWN);
     }
@@ -614,7 +614,7 @@ iptables_fw_auth_unreachable(int tag)
 {
     int got_authdown_ruleset = NULL == get_ruleset(FWRULESET_AUTH_IS_DOWN) ? 0 : 1;
     if (got_authdown_ruleset)
-        return iptables_do_command("-t mangle -A " CHAIN_AUTH_IS_DOWN " -j MARK --set-mark 0x%u", tag);
+        return iptables_do_command("-t mangle -A " CHAIN_AUTH_IS_DOWN " -j MARK --set-mark 0x%u/0x00ff", tag);
     else
         return 1;
 }
@@ -737,15 +737,14 @@ int
 iptables_fw_single_counter_update(t_client *client)
 {
     FILE *output;
-    char *script, ip[16], rc;
+    char *script, ip[16];
     unsigned long long int counter;
-    struct in_addr tempaddr;
 
     /* Look for outgoing traffic */
     safe_asprintf(&script, "iptables -t %s -L %s %s | grep %s", "mangle", CHAIN_OUTGOING, "-v -n -x", client->ip);
 
     iptables_insert_gateway_id(&script);
- debug(LOG_ERR, script);
+    debug(LOG_ERR, script);
     output = popen(script, "r");
     free(script);
     if (!output) {
@@ -753,20 +752,15 @@ iptables_fw_single_counter_update(t_client *client)
         return -1;
     }
 
-    /* skip the first two lines */
-    //while (('\n' != fgetc(output)) && !feof(output)) ;
-    //while (('\n' != fgetc(output)) && !feof(output)) ;
-    while (output && !(feof(output))) {
-debug(LOG_INFO, output);
-        rc = fscanf(output, "%*s %llu %*s %*s %*s %*s %*s %15[0-9.] %*s %*s %*s %*s %*s %*s", &counter, ip);
-        //rc = fscanf(output, "%*s %llu %*s %*s %*s %*s %*s %15[0-9.] %*s %*s %*s %*s %*s 0x%*u", &counter, ip);
-        if (2 == rc && EOF != rc) {
-            /* Sanity */
-            if (!inet_aton(ip, &tempaddr)) {
-                debug(LOG_WARNING, "I was supposed to read an IP address but instead got [%s] - ignoring it", ip);
-                continue;
-            }
-            debug(LOG_DEBUG, "Read outgoing traffic for %s: Bytes=%llu", ip, counter);
+char output_str[200];int i=0;char ch;
+
+    while (('\n' != (ch = fgetc(output))) && !feof(output)) 
+	output_str[i++] = ch;
+output_str[i] = '\0';
+debug(LOG_INFO, output_str);
+
+	if (i > 0) {    
+            sscanf(output_str, "%*s %llu %*s %*s %*s %*s %*s %15[0-9.] %*s %*s %*s %*s %*s %*s", &counter, ip);
             LOCK_CLIENT_LIST();
             if (strcmp(client->ip, ip) == 0) {
                 if ((client->counters.outgoing - client->counters.outgoing_history) < counter) {
@@ -786,14 +780,13 @@ debug(LOG_INFO, output);
                 iptables_fw_destroy_mention("mangle", CHAIN_INCOMING, ip);
             }
             UNLOCK_CLIENT_LIST();
-        }
     }
     pclose(output);
 
     /* Look for incoming traffic */
     safe_asprintf(&script, "iptables -t %s -L %s %s | grep %s", "mangle", CHAIN_INCOMING, "-v -n -x", client->ip);
     iptables_insert_gateway_id(&script);
- debug(LOG_ERR, script);
+    debug(LOG_ERR, script);
     output = popen(script, "r");
     free(script);
     if (!output) {
@@ -801,18 +794,14 @@ debug(LOG_INFO, output);
         return -1;
     }
 
-    /* skip the first two lines */
-    //while (('\n' != fgetc(output)) && !feof(output)) ;
-    //while (('\n' != fgetc(output)) && !feof(output)) ;
-    while (output && !(feof(output))) {
-        rc = fscanf(output, "%*s %llu %*s %*s %*s %*s %*s %*s %15[0-9.]", &counter, ip);
-        if (2 == rc && EOF != rc) {
-            /* Sanity */
-            if (!inet_aton(ip, &tempaddr)) {
-                debug(LOG_WARNING, "I was supposed to read an IP address but instead got [%s] - ignoring it", ip);
-                continue;
-            }
-            debug(LOG_DEBUG, "Read incoming traffic for %s: Bytes=%llu", ip, counter);
+    i = 0;
+    while (('\n' != (ch = fgetc(output))) && !feof(output)) 
+    output_str[i++] = ch;
+    output_str[i] = '\0';
+    debug(LOG_INFO, output_str);
+
+    if (i > 0) {
+            sscanf(output_str, "%*s %llu %*s %*s %*s %*s %*s %*s %15[0-9.]", &counter, ip);
             LOCK_CLIENT_LIST();
             if (strcmp(client->ip, ip) == 0) {
                 if ((client->counters.incoming - client->counters.incoming_history) < counter) {
@@ -830,7 +819,6 @@ debug(LOG_INFO, output);
                 iptables_fw_destroy_mention("mangle", CHAIN_INCOMING, ip);
             }
             UNLOCK_CLIENT_LIST();
-        }
     }
     pclose(output);
 
