@@ -148,7 +148,10 @@ authenticate_client(request * r)
     if ((var = httpdGetVariableByName(r, "token")) != NULL) {
         token = safe_strdup(var->value);
     } else {
+	if(client->token)
         token = safe_strdup(client->token);
+	else
+	token = safe_strdup(client->mac);
     }
 
     /* 
