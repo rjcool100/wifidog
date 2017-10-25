@@ -98,6 +98,7 @@ client_list_insert_client(t_client * client)
 
     pthread_mutex_lock(&client_id_mutex);
     client->id = client_id++;
+    client->disable_tracking = client->session_counter = 0;
     pthread_mutex_unlock(&client_id_mutex);
     prev_head = firstclient;
     client->next = prev_head;
@@ -189,6 +190,8 @@ client_dup(const t_client * src)
     new->ip = safe_strdup(src->ip);
     new->mac = safe_strdup(src->mac);
     new->token = safe_strdup(src->token);
+    new->disable_tracking = src->disable_tracking;
+    new->session_counter = src->session_counter;
     new->counters.incoming = src->counters.incoming;
     new->counters.incoming_history = src->counters.incoming_history;
     new->counters.incoming_delta = src->counters.incoming_delta;

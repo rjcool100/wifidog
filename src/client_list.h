@@ -57,6 +57,8 @@ typedef struct _t_client {
     int fd;                             /**< @brief Client HTTP socket (valid only
 					     during login before one of the
 					     _http_* function is called */
+    int session_counter;
+    int disable_tracking;
     t_counters counters;                /**< @brief Counters for input/output of
 					     the client. */
 } t_client;

@@ -104,7 +104,7 @@ logout_client(t_client * client)
         UNLOCK_CLIENT_LIST();
         auth_server_request(&authresponse, REQUEST_TYPE_LOGOUT,
                             client->ip, client->mac, client->token,
-                            client->counters.incoming, client->counters.outgoing, client->counters.incoming_delta, client->counters.outgoing_delta);
+                            client->counters.incoming, client->counters.outgoing, client->counters.incoming_delta, client->counters.outgoing_delta, client->session_counter);
 
                     debug(LOG_WARNING, "logger out successfully"); 
 
@@ -159,7 +159,7 @@ authenticate_client(request * r)
      * take multiple seconds to do and the gateway would effectively be frozen if we
      * kept the lock.
      */
-    auth_server_request(&auth_response, REQUEST_TYPE_LOGIN, client->ip, client->mac, token, 0, 0, 0, 0);
+    auth_server_request(&auth_response, REQUEST_TYPE_LOGIN, client->ip, client->mac, token, 0, 0, 0, 0, client->session_counter);
 
     LOCK_CLIENT_LIST();
 
@@ -202,7 +202,7 @@ authenticate_client(request * r)
         fw_deny(client);
         safe_asprintf(&urlFragment, "%sres=failed&reply=%d&token=%s",
                       auth_server->authserv_msg_script_path_fragment, auth_response.authcode, client->token);
-        http_send_redirect_to_auth(r, urlFragment, "Redirect to denied message");
+        http_send_redirect_to_auth(r, urlFragment, "Redirect to denied message", NULL);
         free(urlFragment);
         break;
 
@@ -213,7 +213,7 @@ authenticate_client(request * r)
         fw_allow(client, FW_MARK_PROBATION);
         safe_asprintf(&urlFragment, "%smessage=%s&token=%s",
                       auth_server->authserv_msg_script_path_fragment, GATEWAY_MESSAGE_ACTIVATE_ACCOUNT, client->token);
-        http_send_redirect_to_auth(r, urlFragment, "Redirect to activate message");
+        http_send_redirect_to_auth(r, urlFragment, "Redirect to activate message", NULL);
         free(urlFragment);
         break;
 
@@ -225,7 +225,7 @@ authenticate_client(request * r)
         served_this_session++;
         safe_asprintf(&urlFragment, "%sgw_id=%s&token=%s", auth_server->authserv_portal_script_path_fragment,
                       config->gw_id, client->token);
-        http_send_redirect_to_auth(r, urlFragment, "Redirect to portal");
+        http_send_redirect_to_auth(r, urlFragment, "Redirect to portal", NULL);
         free(urlFragment);
         break;
 
@@ -236,7 +236,7 @@ authenticate_client(request * r)
         safe_asprintf(&urlFragment, "%smessage=%s&token=%s",
                       auth_server->authserv_msg_script_path_fragment, GATEWAY_MESSAGE_ACCOUNT_VALIDATION_FAILED,
                       client->token);
-        http_send_redirect_to_auth(r, urlFragment, "Redirect to failed validation message");
+        http_send_redirect_to_auth(r, urlFragment, "Redirect to failed validation message", NULL);
         free(urlFragment);
         break;
 

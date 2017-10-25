@@ -258,6 +258,7 @@ fw_sync_with_authserver(void)
     t_authresponse authresponse;
     t_client *p1, *p2, *worklist, *tmp;
     s_config *config = config_get_config();
+    int client_idle_time;
 
     if (-1 == iptables_fw_counters_update()) {
         debug(LOG_ERR, "Could not get counters from firewall!");
@@ -281,30 +282,46 @@ fw_sync_with_authserver(void)
          * However, if the firewall blocks it, it will not help.  The suggested
          * way to deal witht his is to keep the DHCP lease time extremely
          * short:  Shorter than config->checkinterval * config->clienttimeout */
-        icmp_ping(p1->ip);
+        //icmp_ping(p1->ip);
         /* Update the counters on the remote server only if we have an auth server */
-        if (config->auth_servers != NULL) {
+        if (config->auth_servers != NULL && p1->disable_tracking == 0) {
             auth_server_request(&authresponse, REQUEST_TYPE_COUNTERS, p1->ip, p1->mac, p1->token, p1->counters.incoming,
-                                p1->counters.outgoing, p1->counters.incoming_delta, p1->counters.outgoing_delta);
+                                p1->counters.outgoing, p1->counters.incoming_delta, p1->counters.outgoing_delta, p1->session_counter);
         }
-
         time_t current_time = time(NULL);
         debug(LOG_INFO,
               "Checking client %s for timeout:  Last updated %ld (%ld seconds ago), timeout delay %ld seconds, current time %ld, ",
               p1->ip, p1->counters.last_updated, current_time - p1->counters.last_updated,
               config->checkinterval * config->clienttimeout, current_time);
-        if (p1->counters.last_updated + (config->checkinterval * config->clienttimeout) <= current_time) {
-            /* Timing out user */
-            debug(LOG_INFO, "%s - Inactive for more than %ld seconds, removing client and denying in firewall",
-                  p1->ip, config->checkinterval * config->clienttimeout);
-            LOCK_CLIENT_LIST();
-            tmp = client_list_find_by_client(p1);
-            if (NULL != tmp) {
-                logout_client(tmp);
-            } else {
-                debug(LOG_NOTICE, "Client was already removed. Not logging out.");
-            }
-            UNLOCK_CLIENT_LIST();
+	client_idle_time = p1->counters.last_updated + (config->checkinterval * config->clienttimeout);
+        if (client_idle_time <= current_time) {
+		if(client_idle_time + 1800 >= current_time){
+			if(!p1->disable_tracking){
+				LOCK_CLIENT_LIST();
+				tmp = client_list_find_by_client(p1);
+				fw_deny(tmp);
+				fw_allow(tmp, FW_MARK_KNOWN);
+				tmp->disable_tracking = 1;
+				tmp->session_counter++;
+				tmp->counters.outgoing = tmp->counters.outgoing_history = tmp->counters.incoming = tmp->counters.incoming_history = 0;
+				UNLOCK_CLIENT_LIST();
+				debug(LOG_INFO, "%s - Inactive for more than %ld seconds, disabling tracking",
+                                p1->ip, config->checkinterval * config->clienttimeout);
+			}
+		}
+		else{
+			/* Timing out user */
+            		debug(LOG_INFO, "%s - Inactive for more than %ld seconds, removing client and denying in firewall",
+                  		p1->ip, config->checkinterval * config->clienttimeout + 1800);
+            		LOCK_CLIENT_LIST();
+            		tmp = client_list_find_by_client(p1);
+            		if (NULL != tmp) {
+                	logout_client(tmp);
+			} else {
+                	debug(LOG_NOTICE, "Client was already removed. Not logging out.");
+           		}
+            		UNLOCK_CLIENT_LIST();
+		}
         } else {
             /*
              * This handles any change in

@@ -113,16 +113,21 @@ iptables_do_command(const char *format, ...)
 
     debug(LOG_DEBUG, "Executing command: %s", cmd);
 
+int exec_count = 0;
+while(exec_count <= 5){
     rc = execute(cmd, fw_quiet);
 
     if (rc != 0) {
         // If quiet, do not display the error
-        if (fw_quiet == 0)
+        //if (fw_quiet == 0)
             debug(LOG_ERR, "iptables command failed(%d): %s", rc, cmd);
-        else if (fw_quiet == 1)
-            debug(LOG_DEBUG, "iptables command failed(%d): %s", rc, cmd);
+        //else if (fw_quiet == 1)
+        //    debug(LOG_DEBUG, "iptables command failed(%d): %s", rc, cmd);
     }
-
+else
+break;
+exec_count++;
+}
     free(cmd);
 
     return rc;
@@ -649,7 +654,6 @@ iptables_fw_counters_update(void)
         debug(LOG_ERR, "popen(): %s", strerror(errno));
         return -1;
     }
-
     /* skip the first two lines */
     while (('\n' != fgetc(output)) && !feof(output)) ;
     while (('\n' != fgetc(output)) && !feof(output)) ;
@@ -666,7 +670,11 @@ iptables_fw_counters_update(void)
             LOCK_CLIENT_LIST();
             if ((p1 = client_list_find_by_ip(ip))) {
                 if ((p1->counters.outgoing - p1->counters.outgoing_history) < counter) {
-                    p1->counters.outgoing_delta = p1->counters.outgoing_history + counter - p1->counters.outgoing;
+                    if(p1->disable_tracking)
+			{
+				p1->disable_tracking = 0;
+			}
+		    p1->counters.outgoing_delta = p1->counters.outgoing_history + counter - p1->counters.outgoing;
                     p1->counters.outgoing = p1->counters.outgoing_history + counter;
                     p1->counters.last_updated = time(NULL);
                     debug(LOG_DEBUG, "%s - Outgoing traffic %llu bytes, updated counter.outgoing to %llu bytes.  Updated last_updated to %d", ip,
@@ -710,7 +718,7 @@ iptables_fw_counters_update(void)
             debug(LOG_DEBUG, "Read incoming traffic for %s: Bytes=%llu", ip, counter);
             LOCK_CLIENT_LIST();
             if ((p1 = client_list_find_by_ip(ip))) {
-                if ((p1->counters.incoming - p1->counters.incoming_history) < counter) {
+                if ((p1->counters.incoming - p1->counters.incoming_history) < counter){
                     p1->counters.incoming_delta = p1->counters.incoming_history + counter - p1->counters.incoming;
                     p1->counters.incoming = p1->counters.incoming_history + counter;
                     debug(LOG_DEBUG, "%s - Incoming traffic %llu bytes, Updated counter.incoming to %llu bytes", ip, counter, p1->counters.incoming);
@@ -733,14 +741,13 @@ iptables_fw_counters_update(void)
 }
 
 /** Update the counters of single client in the client list */
-int
+/*int
 iptables_fw_single_counter_update(t_client *client)
 {
     FILE *output;
     char *script, ip[16];
     unsigned long long int counter;
 
-    /* Look for outgoing traffic */
     safe_asprintf(&script, "iptables -t %s -L %s %s | grep %s", "mangle", CHAIN_OUTGOING, "-v -n -x", client->ip);
 
     iptables_insert_gateway_id(&script);
@@ -783,7 +790,6 @@ debug(LOG_INFO, output_str);
     }
     pclose(output);
 
-    /* Look for incoming traffic */
     safe_asprintf(&script, "iptables -t %s -L %s %s | grep %s", "mangle", CHAIN_INCOMING, "-v -n -x", client->ip);
     iptables_insert_gateway_id(&script);
     debug(LOG_ERR, script);
@@ -807,6 +813,7 @@ debug(LOG_INFO, output_str);
                 if ((client->counters.incoming - client->counters.incoming_history) < counter) {
                     client->counters.incoming_delta = client->counters.incoming_history + counter - client->counters.incoming;
                     client->counters.incoming = client->counters.incoming_history + counter;
+                    client->counters.last_updated = time(NULL); 
                     debug(LOG_DEBUG, "%s - Incoming traffic %llu bytes, Updated counter.incoming to %llu bytes", ip, counter, client->counters.incoming);
                 }
             } else {
@@ -823,4 +830,4 @@ debug(LOG_INFO, output_str);
     pclose(output);
 
     return 1;
-}
+}*/

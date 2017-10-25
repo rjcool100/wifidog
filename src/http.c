@@ -76,34 +76,6 @@ http_callback_404(httpd * webserver, request * r, int error_code)
              r->request.host, r->request.path, r->request.query[0] ? "?" : "", r->request.query);
     url = httpdUrlEncode(tmp_url);
 
-    /*if (!is_online()) {
-        // The internet connection is down at the moment  - apologize and do not redirect anywhere 
-        char *buf;
-        safe_asprintf(&buf,
-                      "<p>We apologize, but it seems that the internet connection that powers this hotspot is temporarily unavailable.</p>"
-                      "<p>If at all possible, please notify the owners of this hotspot that the internet connection is out of service.</p>"
-                      "<p>The maintainers of this network are aware of this disruption.  We hope that this situation will be resolved soon.</p>"
-                      "<p>In a while please <a href='%s'>click here</a> to try your request again.</p>", tmp_url);
-
-        send_http_page(r, "Uh oh! Internet access unavailable!", buf);
-        free(buf);
-        debug(LOG_INFO, "Sent %s an apology since I am not online - no point sending them to auth server",
-              r->clientAddr);
-    } else if (!is_auth_online()) {
-        // The auth server is down at the moment - apologize and do not redirect anywhere 
-        char *buf;
-        safe_asprintf(&buf,
-                      "<p>We apologize, but it seems that we are currently unable to re-direct you to the login screen.</p>"
-                      "<p>The maintainers of this network are aware of this disruption.  We hope that this situation will be resolved soon.</p>"
-                      "<p>In a couple of minutes please <a href='%s'>click here</a> to try your request again.</p>",
-                      tmp_url);
-
-        send_http_page(r, "Uh oh! Login screen unavailable!", buf);
-        free(buf);
-        debug(LOG_INFO, "Sent %s an apology since auth server not online - no point sending them to auth server",
-              r->clientAddr);
-    } else {
-*/
         /* Re-direct them to auth server */
         char *urlFragment;
 	char current_res[10];
@@ -165,7 +137,7 @@ http_callback_404(httpd * webserver, request * r, int error_code)
         }
 
         debug(LOG_INFO, "Captured %s requesting [%s] and re-directing them to login page", r->clientAddr, url);
-        http_send_redirect_to_auth(r, urlFragment, "Redirect to login page");
+        http_send_redirect_to_auth(r, urlFragment, "Redirect to login page", config->gw_address);
         free(urlFragment);
   //  }
     free(url);
@@ -210,7 +182,7 @@ http_callback_status(httpd * webserver, request * r)
  * @param urlFragment The end of the auth server URL to redirect to (the part after path)
  * @param text The text to include in the redirect header ant the mnual redirect title */
 void
-http_send_redirect_to_auth(request * r, const char *urlFragment, const char *text)
+http_send_redirect_to_auth(request * r, const char *urlFragment, const char *text, char *gw_address)
 {
     char *protocol = NULL;
     int port = 80;
@@ -227,6 +199,8 @@ http_send_redirect_to_auth(request * r, const char *urlFragment, const char *tex
     char *url = NULL;
     safe_asprintf(&url, "%s://%s:%d%s%s",
                   protocol, auth_server->authserv_hostname, port, auth_server->authserv_path, urlFragment);
+    if(gw_address)
+    	safe_asprintf(&url, "http://%s:8080/login.html?url=%s", gw_address, httpdUrlEncode(url));
     http_send_redirect(r, url, text);
     free(url);
 }
