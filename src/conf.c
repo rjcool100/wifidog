@@ -92,6 +92,7 @@ typedef enum {
     oHTTPDPassword,
     oClientTimeout,
     oCheckInterval,
+    osyncInterval,
     oWdctlSocket,
     oSyslogFacility,
     oFirewallRule,
@@ -129,6 +130,7 @@ static const struct {
     "httpdpassword", oHTTPDPassword}, {
     "clienttimeout", oClientTimeout}, {
     "checkinterval", oCheckInterval}, {
+    "syncinterval", osyncInterval}, {
     "syslogfacility", oSyslogFacility}, {
     "wdctlsocket", oWdctlSocket}, {
     "hostname", oAuthServHostname}, {
@@ -194,6 +196,7 @@ config_init(void)
     config.httpdpassword = NULL;
     config.clienttimeout = DEFAULT_CLIENTTIMEOUT;
     config.checkinterval = DEFAULT_CHECKINTERVAL;
+    config.syncinterval = DEFAULT_SYNCINTERVAL;
     config.daemon = -1;
     config.pidfile = NULL;
     config.wdctl_sock = safe_strdup(DEFAULT_WDCTL_SOCK);
@@ -638,7 +641,7 @@ get_ruleset(const char *ruleset)
 }
 
 /**
-@param filename Full path of the configuration file to be read 
+@param filename Full path of the configuration file to be read
 */
 void
 config_read(const char *filename)
@@ -647,7 +650,9 @@ config_read(const char *filename)
     char line[MAX_BUF], *s, *p1, *p2, *rawarg = NULL;
     int linenum = 0, opcode, value;
     size_t len;
-
+    char *token, *str;
+    int index = 0;
+    char**array;
     debug(LOG_INFO, "Reading configuration file '%s'", filename);
 
     if (!(fd = fopen(filename, "r"))) {
@@ -718,7 +723,12 @@ config_read(const char *filename)
                     config.gw_id = safe_strdup(p1);
                     break;
                 case oGatewayInterface:
-                    config.gw_interface = safe_strdup(p1);
+		array = (char**)calloc(3, sizeof(char*));
+           	str = safe_strdup(p1);
+           	while ((token = strsep(&str, ",")) != NULL)
+                   array[index++] = token;
+
+                    config.gw_interface = array;
                     break;
                 case oGatewayAddress:
                     config.gw_address = safe_strdup(p1);
@@ -979,7 +989,7 @@ parse_popular_servers(const char *ptr)
     while ((hostname = strsep(&ptrcopy, ","))) {  /* hostname does *not* need allocation. strsep
                                                      provides a pointer in ptrcopy. */
         /* Skip leading spaces. */
-        while (*hostname != '\0' && isblank(*hostname)) { 
+        while (*hostname != '\0' && isblank(*hostname)) {
             hostname++;
         }
         if (*hostname == '\0') {  /* Equivalent to strcmp(hostname, "") == 0 */

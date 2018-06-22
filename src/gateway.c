@@ -439,23 +439,23 @@ main_loop(void)
 
     /* If we don't have the Gateway IP address, get it. Can't fail. */
     if (!config->gw_address) {
-        debug(LOG_DEBUG, "Finding IP address of %s", config->gw_interface);
-        if ((config->gw_address = get_iface_ip(config->gw_interface)) == NULL) {
-            debug(LOG_ERR, "Could not get IP address information of %s, exiting...", config->gw_interface);
+        debug(LOG_DEBUG, "Finding IP address of %s", config->gw_interface[0]);
+        if ((config->gw_address = get_iface_ip(config->gw_interface[0])) == NULL) {
+            debug(LOG_ERR, "Could not get IP address information of %s, exiting...", config->gw_interface[0]);
             exit(1);
         }
-        debug(LOG_DEBUG, "%s = %s", config->gw_interface, config->gw_address);
+        debug(LOG_DEBUG, "%s = %s", config->gw_interface[0], config->gw_address);
     }
 
     /* If we don't have the Gateway ID, construct it from the internal MAC address.
      * "Can't fail" so exit() if the impossible happens. */
     if (!config->gw_id) {
-        debug(LOG_DEBUG, "Finding MAC address of %s", config->gw_interface);
-        if ((config->gw_id = get_iface_mac(config->gw_interface)) == NULL) {
-            debug(LOG_ERR, "Could not get MAC address information of %s, exiting...", config->gw_interface);
+        debug(LOG_DEBUG, "Finding MAC address of %s", config->gw_interface[0]);
+        if ((config->gw_id = get_iface_mac(config->gw_interface[0])) == NULL) {
+            debug(LOG_ERR, "Could not get MAC address information of %s, exiting...", config->gw_interface[0]);
             exit(1);
         }
-        debug(LOG_DEBUG, "%s = %s", config->gw_interface, config->gw_id);
+        debug(LOG_DEBUG, "%s = %s", config->gw_interface[0], config->gw_id);
     }
 
     /* Initializes the web server */

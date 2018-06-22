@@ -52,7 +52,7 @@
 
 /** Launches a thread that periodically checks if any of the connections has timed out
 @param arg Must contain a pointer to a string containing the IP adress of the client to check to check
-@todo Also pass MAC adress? 
+@todo Also pass MAC adress?
 @todo This thread loops infinitely, need a watchdog to verify that it is still running?
 */
 void
@@ -64,7 +64,7 @@ thread_client_timeout_check(const void *arg)
 
     while (1) {
         /* Sleep for config.checkinterval seconds... */
-        timeout.tv_sec = time(NULL) + config_get_config()->checkinterval;
+        timeout.tv_sec = time(NULL) + config_get_config()->syncinterval;
         timeout.tv_nsec = 0;
 
         /* Mutex must be locked for pthread_cond_timedwait... */
@@ -106,7 +106,7 @@ logout_client(t_client * client)
                             client->ip, client->mac, client->token,
                             client->counters.incoming, client->counters.outgoing, client->counters.incoming_delta, client->counters.outgoing_delta, client->session_counter);
 
-                    debug(LOG_WARNING, "logger out successfully"); 
+                    debug(LOG_WARNING, "logger out successfully");
 
         if (authresponse.authcode == AUTH_ERROR)
             debug(LOG_WARNING, "Auth server error when reporting logout");
@@ -154,7 +154,7 @@ authenticate_client(request * r)
 	token = safe_strdup(client->mac);
     }
 
-    /* 
+    /*
      * At this point we've released the lock while we do an HTTP request since it could
      * take multiple seconds to do and the gateway would effectively be frozen if we
      * kept the lock.

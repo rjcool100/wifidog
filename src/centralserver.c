@@ -55,13 +55,13 @@
 
 /** Initiates a transaction with the auth server, either to authenticate or to
  * update the traffic counters at the server
-@param authresponse Returns the information given by the central server 
+@param authresponse Returns the information given by the central server
 @param request_type Use the REQUEST_TYPE_* defines in centralserver.h
 @param ip IP adress of the client this request is related to
 @param mac MAC adress of the client this request is related to
 @param token Authentification token of the client
-@param incoming Current counter of the client's total incoming traffic, in bytes 
-@param outgoing Current counter of the client's total outgoing traffic, in bytes 
+@param incoming Current counter of the client's total incoming traffic, in bytes
+@param outgoing Current counter of the client's total outgoing traffic, in bytes
 */
 t_authcode
 auth_server_request(t_authresponse * authresponse, const char *request_type, const char *ip, const char *mac,
@@ -95,10 +95,10 @@ auth_server_request(t_authresponse * authresponse, const char *request_type, con
              auth_server->authserv_path,
              auth_server->authserv_auth_script_path_fragment,
              request_type,
-             ip, mac, safe_token, 
-             incoming, 
-             outgoing, 
-             incoming_delta, 
+             ip, mac, safe_token,
+             incoming,
+             outgoing,
+             incoming_delta,
              outgoing_delta,
              config->gw_id, session_counter, VERSION, auth_server->authserv_hostname);
     } else {
@@ -133,10 +133,17 @@ auth_server_request(t_authresponse * authresponse, const char *request_type, con
 
     if ((tmp = strstr(res, "Auth: "))) {
         if (sscanf(tmp, "Auth: %d", (int *)&authresponse->authcode) == 1) {
+            if ((tmp = strstr(res, "Incoming: "))) {
+              sscanf(tmp, "Incoming: %lu", (int *)&authresponse->incoming);
+            }
+            if ((tmp = strstr(res, "Outgoing: "))) {
+              sscanf(tmp, "Outgoing: %lu", (int *)&authresponse->outgoing);
+            }
             debug(LOG_INFO, "Auth server returned authentication code %d", authresponse->authcode);
             free(res);
             return (authresponse->authcode);
-        } else {
+        }
+        else {
             debug(LOG_WARNING, "Auth server did not return expected authentication code");
             free(res);
             return (AUTH_ERROR);
@@ -234,7 +241,7 @@ _connect_auth_server(int level)
             }
         }
 
-        /* 
+        /*
          * If we got any h_addr buffer for one of the popular servers, in other
          * words, if one of the popular servers resolved, we'll assume the DNS
          * works, otherwise we'll deal with net connection or DNS failure.

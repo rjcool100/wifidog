@@ -386,6 +386,13 @@ fw_sync_with_authserver(void)
                     debug(LOG_INFO, "%s - User in validation period", tmp->ip);
                     break;
 
+                case AUTH_SYNC_DATA:
+                    /*
+                    * compare the client octets with the octets from the server
+                    */
+                    debug(LOG_INFO, "%s - Syncing data for user with server", tmp->ip);
+                    break;
+
                 case AUTH_ERROR:
                     debug(LOG_WARNING, "Error communicating with auth server - leaving %s as-is for now", tmp->ip);
                     break;

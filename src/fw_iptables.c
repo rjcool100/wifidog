@@ -81,7 +81,7 @@ iptables_insert_gateway_id(char **input)
         memcpy(token, "%1$s", 4);
 
     config = config_get_config();
-    tmp_intf = safe_strdup(config->gw_interface);
+    tmp_intf = safe_strdup(config->gw_interface[0]);
     if (strlen(tmp_intf) > CHAIN_NAME_MAX_LEN) {
         *(tmp_intf + CHAIN_NAME_MAX_LEN) = '\0';
     }
@@ -92,7 +92,7 @@ iptables_insert_gateway_id(char **input)
     *input = buffer;
 }
 
-/** @internal 
+/** @internal
  * */
 static int
 iptables_do_command(const char *format, ...)
@@ -114,7 +114,7 @@ iptables_do_command(const char *format, ...)
     debug(LOG_DEBUG, "Executing command: %s", cmd);
 
 int exec_count = 0;
-while(exec_count <= 5){
+while(exec_count <= 3){
     rc = execute(cmd, fw_quiet);
 
     if (rc != 0) {
@@ -290,12 +290,24 @@ iptables_fw_init(void)
     if (got_authdown_ruleset)
         iptables_do_command("-t mangle -N " CHAIN_AUTH_IS_DOWN);
 
+int index = 0;
+char* cur_interface;
+while(index < 3 && (cur_interface = config->gw_interface[index])){
+/* Assign links and rules to these new chains */
+iptables_do_command("-t mangle -I PREROUTING 1 -i %s -j " CHAIN_OUTGOING, cur_interface);
+iptables_do_command("-t mangle -I PREROUTING 1 -i %s -j " CHAIN_TRUSTED, cur_interface);     //this rule will be inserted before the prior one
+//if (got_authdown_ruleset)
+//        iptables_do_command("-t mangle -I PREROUTING 1 -i %s -j " CHAIN_AUTH_IS_DOWN, cur_interface);    //this rule must be last in the chain
+iptables_do_command("-t mangle -I POSTROUTING 1 -o %s -j " CHAIN_INCOMING, cur_interface);
+
+index++;
+}
     /* Assign links and rules to these new chains */
-    iptables_do_command("-t mangle -I PREROUTING 1 -i %s -j " CHAIN_OUTGOING, config->gw_interface);
-    iptables_do_command("-t mangle -I PREROUTING 1 -i %s -j " CHAIN_TRUSTED, config->gw_interface);     //this rule will be inserted before the prior one
-    if (got_authdown_ruleset)
-        iptables_do_command("-t mangle -I PREROUTING 1 -i %s -j " CHAIN_AUTH_IS_DOWN, config->gw_interface);    //this rule must be last in the chain
-    iptables_do_command("-t mangle -I POSTROUTING 1 -o %s -j " CHAIN_INCOMING, config->gw_interface);
+//    iptables_do_command("-t mangle -I PREROUTING 1 -i %s -j " CHAIN_OUTGOING, config->gw_interface);
+//    iptables_do_command("-t mangle -I PREROUTING 1 -i %s -j " CHAIN_TRUSTED, config->gw_interface);     //this rule will be inserted before the prior one
+//   if (got_authdown_ruleset)
+//        iptables_do_command("-t mangle -I PREROUTING 1 -i %s -j " CHAIN_AUTH_IS_DOWN, config->gw_interface);    //this rule must be last in the chain
+//    iptables_do_command("-t mangle -I POSTROUTING 1 -o %s -j " CHAIN_INCOMING, config->gw_interface);
 
     for (p = config->trustedmaclist; p != NULL; p = p->next)
         iptables_do_command("-t mangle -A " CHAIN_TRUSTED " -m mac --mac-source %s -j MARK --set-mark %d", p->mac,
@@ -317,9 +329,12 @@ iptables_fw_init(void)
     if (got_authdown_ruleset)
         iptables_do_command("-t nat -N " CHAIN_AUTH_IS_DOWN);
 
+index = 0;
+while(index < 3 && (cur_interface = config->gw_interface[index])){
     /* Assign links and rules to these new chains */
-    iptables_do_command("-t nat -A PREROUTING -i %s -j " CHAIN_OUTGOING, config->gw_interface);
-
+    iptables_do_command("-t nat -A PREROUTING -i %s -j " CHAIN_OUTGOING, cur_interface);
+index++;
+}
     iptables_do_command("-t nat -A " CHAIN_OUTGOING " -d %s -j " CHAIN_TO_ROUTER, config->gw_address);
     iptables_do_command("-t nat -A " CHAIN_TO_ROUTER " -j ACCEPT");
 
@@ -328,10 +343,10 @@ iptables_fw_init(void)
     if ((proxy_port = config_get_config()->proxy_port) != 0) {
         debug(LOG_DEBUG, "Proxy port set, setting proxy rule");
         iptables_do_command("-t nat -A " CHAIN_TO_INTERNET
-                            " -p tcp --dport 80 -m mark --mark 0x%u/0x00ff -j REDIRECT --to-port %u", FW_MARK_KNOWN,
+                            " -p tcp --dport 80 -m mark --mark 0x%u/0x00ff -j DNAT --to-destination %s:%u", FW_MARK_KNOWN, config->gw_address,
                             proxy_port);
         iptables_do_command("-t nat -A " CHAIN_TO_INTERNET
-                            " -p tcp --dport 80 -m mark --mark 0x%u/0x00ff -j REDIRECT --to-port %u", FW_MARK_PROBATION,
+                            " -p tcp --dport 80 -m mark --mark 0x%u/0x00ff -j DNAT --to-destination %s:%u", FW_MARK_PROBATION, config->gw_address,
                             proxy_port);
     }
 
@@ -345,7 +360,7 @@ iptables_fw_init(void)
         iptables_do_command("-t nat -A " CHAIN_UNKNOWN " -j " CHAIN_AUTH_IS_DOWN);
         iptables_do_command("-t nat -A " CHAIN_AUTH_IS_DOWN " -m mark --mark 0x%u/0x00ff -j ACCEPT", FW_MARK_AUTH_IS_DOWN);
     }
-    iptables_do_command("-t nat -A " CHAIN_UNKNOWN " -p tcp --dport 80 -j REDIRECT --to-ports %d", gw_port);
+    iptables_do_command("-t nat -A " CHAIN_UNKNOWN " -p tcp --dport 80 -j DNAT --to-destination %s:%d", config->gw_address, gw_port);
 
     /*
      *
@@ -365,14 +380,16 @@ iptables_fw_init(void)
         iptables_do_command("-t filter -N " CHAIN_AUTH_IS_DOWN);
 
     /* Assign links and rules to these new chains */
-
+index = 0;
+while(index < 3 && (cur_interface = config->gw_interface[index])){
     /* Insert at the beginning */
-    iptables_do_command("-t filter -I FORWARD -i %s -j " CHAIN_TO_INTERNET, config->gw_interface);
-
+    iptables_do_command("-t filter -I FORWARD -i %s -j " CHAIN_TO_INTERNET, cur_interface);
+index++;
+}
     iptables_do_command("-t filter -A " CHAIN_TO_INTERNET " -m state --state INVALID -j DROP");
 
     /* XXX: Why this? it means that connections setup after authentication
-       stay open even after the connection is done... 
+       stay open even after the connection is done...
        iptables_do_command("-t filter -A " CHAIN_TO_INTERNET " -m state --state RELATED,ESTABLISHED -j ACCEPT"); */
 
     //Won't this rule NEVER match anyway?!?!? benoitg, 2007-06-23
@@ -761,12 +778,12 @@ iptables_fw_single_counter_update(t_client *client)
 
 char output_str[200];int i=0;char ch;
 
-    while (('\n' != (ch = fgetc(output))) && !feof(output)) 
+    while (('\n' != (ch = fgetc(output))) && !feof(output))
 	output_str[i++] = ch;
 output_str[i] = '\0';
 debug(LOG_INFO, output_str);
 
-	if (i > 0) {    
+	if (i > 0) {
             sscanf(output_str, "%*s %llu %*s %*s %*s %*s %*s %15[0-9.] %*s %*s %*s %*s %*s %*s", &counter, ip);
             LOCK_CLIENT_LIST();
             if (strcmp(client->ip, ip) == 0) {
@@ -801,7 +818,7 @@ debug(LOG_INFO, output_str);
     }
 
     i = 0;
-    while (('\n' != (ch = fgetc(output))) && !feof(output)) 
+    while (('\n' != (ch = fgetc(output))) && !feof(output))
     output_str[i++] = ch;
     output_str[i] = '\0';
     debug(LOG_INFO, output_str);
@@ -813,7 +830,7 @@ debug(LOG_INFO, output_str);
                 if ((client->counters.incoming - client->counters.incoming_history) < counter) {
                     client->counters.incoming_delta = client->counters.incoming_history + counter - client->counters.incoming;
                     client->counters.incoming = client->counters.incoming_history + counter;
-                    client->counters.last_updated = time(NULL); 
+                    client->counters.last_updated = time(NULL);
                     debug(LOG_DEBUG, "%s - Incoming traffic %llu bytes, Updated counter.incoming to %llu bytes", ip, counter, client->counters.incoming);
                 }
             } else {

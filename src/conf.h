@@ -47,6 +47,7 @@
 #define DEFAULT_HTTPDNAME "WiFiDog"
 #define DEFAULT_CLIENTTIMEOUT 5
 #define DEFAULT_CHECKINTERVAL 60
+#define DEFAULT_SYNCINTERVAL 30
 #define DEFAULT_LOG_SYSLOG 0
 #define DEFAULT_SYSLOG_FACILITY LOG_DAEMON
 #define DEFAULT_WDCTL_SOCK "/tmp/wdctl.sock"
@@ -168,7 +169,7 @@ typedef struct {
 				     firewall rules */
     char *gw_id;                /**< @brief ID of the Gateway, sent to central
 				     server */
-    char *gw_interface;         /**< @brief Interface we will accept connections on */
+    char **gw_interface;         /**< @brief Interface we will accept connections on */
     char *gw_address;           /**< @brief Internal IP address for our web
 				     server */
     int gw_port;                /**< @brief Port the webserver will run on */
@@ -185,6 +186,8 @@ typedef struct {
 				     must be re-authenticated */
     int checkinterval;          /**< @brief Frequency the the client timeout check
 				     thread will run. */
+    int syncinterval;          /**< @brief Frequency the the client sync with auth server
+                      will run. */
     int proxy_port;             /**< @brief Transparent proxy port (0 to disable) */
     char *ssl_certs;            /**< @brief Path to SSL certs for auth server
 		verification */
